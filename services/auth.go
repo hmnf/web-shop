@@ -1,10 +1,15 @@
-package Auth
+package services
 
-import "time"
+import (
+	"time"
+
+	"github.com/jmoiron/sqlx"
+)
 
 type Auth struct {
 	JWTSecret string
-	user      string
+	user      UserMethods
+	db        *sqlx.DB
 }
 
 type TokenDetails struct {
@@ -31,12 +36,38 @@ type AuthMethods interface {
 	CreateToken()
 }
 
-func NewAuthorizationService(jwtSecret string) AuthMethods {
+func NewAuthorizationService(db *sqlx.DB, jwtSecret string, user UserMethods) AuthMethods {
 	return &Auth{
 		JWTSecret: jwtSecret,
+		user:      user,
+		db:        db,
 	}
 }
 
 func (auth *Auth) Login() {
+
+}
+
+func (auth *Auth) Registration() {
+
+}
+
+func (auth *Auth) ExtractAccessMetaData() {
+
+}
+
+func (auth *Auth) ExtractRefreshMetaData() {
+
+}
+
+func (auth *Auth) ValidToken() {
+
+}
+
+func (auth *Auth) GetTokenFromCookie() {
+
+}
+
+func (auth *Auth) CreateToken() {
 
 }

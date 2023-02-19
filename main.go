@@ -10,6 +10,8 @@ import (
 	_ "github.com/lib/pq"
 )
 
+const JWTSecret = "jjqqwewewerereresadf"
+
 type Repository struct {
 	dbConnection *sqlx.DB
 	services     *ServicesList
@@ -17,6 +19,16 @@ type Repository struct {
 
 type ServicesList struct {
 	Authorization services.AuthMethods
+	User          services.UserMethods
+	Cards         services.CardsMethods
+}
+
+func (r *Repository) Login(ctx *rou.Context) {
+
+}
+
+func (r *Repository) UserInfo(ctx *rou.Context) {
+
 }
 
 func main() {
@@ -25,4 +37,23 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	cards := services.NewCardsService(conn)
+	user := services.NewUserService(conn)
+	authorization := services.NewAuthorizationService(conn, JWTSecret, user)
+	middleware := services.NewMiddlewareService(conn, authorization)
+
+	repository := Repository{
+		dbConnection: conn,
+		services: &ServicesList{
+			Authorization: authorization,
+			User:          user,
+			Cards:         cards,
+		},
+	}
+
+	router.Post("/login", repository.Login)
+	router.Get("/user", repository.UserInfo)
+
+	log.Fatal(router.RunServer(":8080"))
 }

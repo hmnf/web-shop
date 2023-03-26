@@ -1,10 +1,4 @@
-package authentication
-
-import "github.com/jmoiron/sqlx"
-
-type UserService struct {
-	db *sqlx.DB
-}
+package main
 
 type User struct {
 	Id         int    `json:"id"`
@@ -17,27 +11,19 @@ type User struct {
 }
 
 type UserMethods interface {
-	Get(userId int) (*User, error)
+	Create() error
 	Delete()
 	Update()
 }
 
-func NewUserService(db *sqlx.DB) UserMethods {
-	return &UserService{
-		db: db,
-	}
+func Create() error {
+	return nil
 }
 
-func (u *UserService) Get(userId int) (*User, error) {
-	var user *User
-
-	return user, nil
-}
-
-func (u *UserService) Delete() {
+func Delete() {
 
 }
 
-func (u *UserService) Update() {
+func Update() {
 
 }

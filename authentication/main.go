@@ -1,8 +1,7 @@
-package authentication
+package main
 
 import (
 	"log"
-	"net/http"
 
 	"github.com/Moranilt/rou"
 	"github.com/jmoiron/sqlx"
@@ -10,20 +9,10 @@ import (
 )
 
 type Repository struct {
-	dbConnection   *sqlx.DB
-	authentication AuthMethods
+	db *sqlx.DB
 }
 
-func (r *Repository) Login(ctx *rou.Context) {
-	user, err := r.authentication.Login(ctx.ResponseWriter(), "joe@mail.com", "123456")
-
-	if err != nil {
-		ctx.ErrorJSONResponse(http.StatusBadRequest, err.Error())
-		return
-	}
-
-	ctx.SuccessJSONResponse(user)
-}
+const JWTSecret = "12312321IDFOIDUFAP123"
 
 func main() {
 	router := rou.NewRouter()
@@ -32,17 +21,11 @@ func main() {
 		log.Fatal(err)
 	}
 
-	JWTSecret := "jsahdjabns121='31/"
-	user := NewUserService(conn)
-	authentication := NewAuthenticationService(conn, JWTSecret, user)
-	// middleware := NewMiddlewareService(conn, authentication)
-
-	repository := Repository{
-		dbConnection:   conn,
-		authentication: authentication,
+	repo := &Repository{
+		db: conn,
 	}
 
-	router.Post("/login", repository.Login)
+	// router.Post("/login", repo.Login)
 
 	log.Fatal(router.RunServer(":8080"))
 }

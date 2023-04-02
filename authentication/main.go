@@ -1,31 +1,58 @@
 package main
 
 import (
+	"context"
 	"log"
+	"net/http"
 
-	"github.com/Moranilt/rou"
-	"github.com/jmoiron/sqlx"
+	"github.com/gorilla/mux"
 	_ "github.com/lib/pq"
+	"github.com/redis/go-redis/v9"
 )
 
-type Repository struct {
-	db *sqlx.DB
+var redisContext = context.Background()
+
+func CreateTokens(w http.ResponseWriter, r *http.Request) {
+	rdb := redis.NewClient(&redis.Options{
+		Addr:     "localhost:8002",
+		Password: "",
+		DB:       0,
+	})
+
+	auth := &Authentication{
+		Secret:       secret,
+		RedisClient:  rdb,
+		RedisContext: redisContext,
+	}
+
+	user, err := decodeBody[UserDetails](r.Body)
+
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(err.Error()))
+		return
+	}
+
+	_, err = auth.CreateTokens(user.Id, user.Role)
+
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(err.Error()))
+		return
+	}
+
+	// json.NewEncoder(w).Encode(td.AccessToken)
 }
 
-const JWTSecret = "12312321IDFOIDUFAP123"
+func UpdateTokens(w http.ResponseWriter, r *http.Request) {
+
+}
 
 func main() {
-	router := rou.NewRouter()
-	conn, err := sqlx.Connect("postgres", "user=root password=123456 dbname=transactions sslmode=disable")
-	if err != nil {
-		log.Fatal(err)
-	}
+	router := mux.NewRouter()
 
-	repo := &Repository{
-		db: conn,
-	}
+	router.HandleFunc("/create", CreateTokens).Methods("POST")
+	router.HandleFunc("/update", UpdateTokens).Methods("GET")
 
-	// router.Post("/login", repo.Login)
-
-	log.Fatal(router.RunServer(":8080"))
+	log.Fatal(http.ListenAndServe(":8002", router))
 }

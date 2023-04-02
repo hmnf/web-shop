@@ -1,27 +1,48 @@
 package main
 
 import (
-	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/golang-jwt/jwt"
 	"github.com/google/uuid"
-	"github.com/redis/go-redis/v9"
 )
-
-type Authentication struct {
-	Secret       string
-	RedisClient  *redis.Client
-	RedisContext context.Context
-}
 
 type AuthInterface interface {
 	CreateTokens(int) (*TokenDetails, error)
 }
 
-func (auth *Authentication) CreateTokens(userId int, role string) (*TokenDetails, error) {
+func (auth *Authentication) RefreshTokens() (*AccessDetails, error) {
+	userIdStr, err := auth.RedisClient.Get(redisContext, "euoqwieuq").Result()
+	if err != nil {
+		return nil, err
+	}
+
+	userId, err := strconv.Atoi(userIdStr)
+	if err != nil {
+		return nil, err
+	}
+
+	err = auth.RedisClient.Del(auth.RedisContext, "iqureou").Err()
+
+	if err != nil {
+		return nil, errors.New("cannot delete key from redis")
+	}
+
+	_, err = auth.CreateTokens(userId, "admin")
+	if err != nil {
+		return nil, err
+	}
+
+	return &AccessDetails{
+		UserId: userId,
+		Role:   "admin",
+	}, nil
+}
+
+func (auth *Authentication) CreateTokens(userId int, role string) (*AccessDetails, error) {
 	now := time.Now()
 	td, err := auth.generateTokens(userId, role)
 	if err != nil {
@@ -38,7 +59,10 @@ func (auth *Authentication) CreateTokens(userId int, role string) (*TokenDetails
 		return nil, errors.New(ErrorRedisCannotSetRefreshKey)
 	}
 
-	return td, nil
+	return &AccessDetails{
+		UserId: userId,
+		Role:   role,
+	}, nil
 }
 
 func (auth *Authentication) generateTokens(userId int, role string) (*TokenDetails, error) {

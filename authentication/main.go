@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"log"
 	"net/http"
 
@@ -10,9 +11,46 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
+type Repository struct {
+	Auth *Authentication
+}
+
 var redisContext = context.Background()
 
-func CreateTokens(w http.ResponseWriter, r *http.Request) {
+func (repo *Repository) CreateTokens(w http.ResponseWriter, r *http.Request) {
+	user, err := decodeBody[UserDetails](r.Body)
+
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(err.Error()))
+		return
+	}
+
+	_, err = repo.Auth.CreateTokens(user.Id, user.Role)
+
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(err.Error()))
+		return
+	}
+
+	// json.NewEncoder(w).Encode(td.AccessToken)
+}
+
+func (repo *Repository) RefreshTokens(w http.ResponseWriter, r *http.Request) {
+	ad, err := repo.Auth.RefreshTokens()
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(err.Error()))
+		return
+	}
+
+	json.NewEncoder(w).Encode(ad)
+}
+
+func main() {
+	router := mux.NewRouter()
+
 	rdb := redis.NewClient(&redis.Options{
 		Addr:     "localhost:8002",
 		Password: "",
@@ -25,34 +63,12 @@ func CreateTokens(w http.ResponseWriter, r *http.Request) {
 		RedisContext: redisContext,
 	}
 
-	user, err := decodeBody[UserDetails](r.Body)
-
-	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte(err.Error()))
-		return
+	repo := &Repository{
+		Auth: auth,
 	}
 
-	_, err = auth.CreateTokens(user.Id, user.Role)
-
-	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte(err.Error()))
-		return
-	}
-
-	// json.NewEncoder(w).Encode(td.AccessToken)
-}
-
-func UpdateTokens(w http.ResponseWriter, r *http.Request) {
-
-}
-
-func main() {
-	router := mux.NewRouter()
-
-	router.HandleFunc("/create", CreateTokens).Methods("POST")
-	router.HandleFunc("/update", UpdateTokens).Methods("GET")
+	router.HandleFunc("/create", repo.CreateTokens).Methods("POST")
+	router.HandleFunc("/refresh", repo.RefreshTokens).Methods("POST")
 
 	log.Fatal(http.ListenAndServe(":8002", router))
 }

@@ -1,6 +1,17 @@
 package main
 
-import "time"
+import (
+	"context"
+	"time"
+
+	"github.com/redis/go-redis/v9"
+)
+
+type Authentication struct {
+	Secret       string
+	RedisClient  *redis.Client
+	RedisContext context.Context
+}
 
 type TokenDetails struct {
 	AccessToken  string
@@ -17,6 +28,6 @@ type UserDetails struct {
 }
 
 type AccessDetails struct {
-	TokenUuid string
-	UserId    int
+	Role   string
+	UserId int
 }

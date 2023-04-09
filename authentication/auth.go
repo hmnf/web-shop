@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/golang-jwt/jwt"
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 )
 
@@ -14,54 +14,71 @@ type AuthInterface interface {
 	CreateTokens(int) (*TokenDetails, error)
 }
 
-func (auth *Authentication) RefreshTokens() (*AccessDetails, error) {
-	userIdStr, err := auth.RedisClient.Get(redisContext, "euoqwieuq").Result()
+func (auth *Authentication) RefreshTokens(RT string) (*Tokens, error) {
+	parsedToken, err := auth.validateToken(RT)
+
 	if err != nil {
 		return nil, err
 	}
 
-	userId, err := strconv.Atoi(userIdStr)
-	if err != nil {
+	if claims, ok := parsedToken.Claims.(*MyCustomClaims); ok && parsedToken.Valid {
+		userIdStr, err := auth.RedisClient.Get(redisContext, claims.Uuid).Result()
+		if err != nil {
+			return nil, errors.New(ErrorRedisTokenIsInvalid)
+		}
+
+		userId, err := strconv.Atoi(userIdStr)
+		if err != nil {
+			return nil, err
+		}
+
+		err = auth.RedisClient.Del(auth.RedisContext, claims.Uuid).Err()
+
+		if err != nil {
+			return nil, errors.New(ErrorRedisCannotDeleteKey)
+		}
+
+		return auth.CreateTokens(userId, "admin")
+	} else {
 		return nil, err
 	}
-
-	err = auth.RedisClient.Del(auth.RedisContext, "iqureou").Err()
-
-	if err != nil {
-		return nil, errors.New("cannot delete key from redis")
-	}
-
-	_, err = auth.CreateTokens(userId, "admin")
-	if err != nil {
-		return nil, err
-	}
-
-	return &AccessDetails{
-		UserId: userId,
-		Role:   "admin",
-	}, nil
 }
 
-func (auth *Authentication) CreateTokens(userId int, role string) (*AccessDetails, error) {
-	now := time.Now()
+func (auth *Authentication) validateToken(token string) (*jwt.Token, error) {
+	parsedToken, err := jwt.ParseWithClaims(token, &MyCustomClaims{}, func(t *jwt.Token) (interface{}, error) {
+		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
+		}
+
+		return []byte(auth.Secret), nil
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return parsedToken, nil
+}
+
+func (auth *Authentication) CreateTokens(userId int, role string) (*Tokens, error) {
 	td, err := auth.generateTokens(userId, role)
 	if err != nil {
 		return nil, err
 	}
 
-	err = auth.RedisClient.Set(auth.RedisContext, td.AccessUuid, fmt.Sprint(userId), td.ATExpires.Sub(now)).Err()
-	if err != nil {
-		return nil, err
-	}
-
-	err = auth.RedisClient.Set(auth.RedisContext, td.RefreshUuid, fmt.Sprint(userId), td.RTExpires.Sub(now)).Err()
+	err = auth.RedisClient.Set(redisContext, td.AccessUuid, fmt.Sprint(userId), time.Until(td.ATExpires)).Err()
 	if err != nil {
 		return nil, errors.New(ErrorRedisCannotSetRefreshKey)
 	}
 
-	return &AccessDetails{
-		UserId: userId,
-		Role:   role,
+	err = auth.RedisClient.Set(redisContext, td.RefreshUuid, fmt.Sprint(userId), time.Until(td.RTExpires)).Err()
+	if err != nil {
+		return nil, errors.New(ErrorRedisCannotSetRefreshKey)
+	}
+
+	return &Tokens{
+		AccessToken:  td.AccessToken,
+		RefreshToken: td.RefreshToken,
 	}, nil
 }
 
@@ -78,18 +95,30 @@ func (auth *Authentication) generateTokens(userId int, role string) (*TokenDetai
 
 	var err error
 
-	atClaims := jwt.MapClaims{}
-	atClaims["acceess_uuid"] = td.AccessUuid
-	atClaims["role"] = role
+	atClaims := MyCustomClaims{
+		"ars",
+		td.AccessUuid,
+		role,
+		jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(atExpires),
+			Issuer:    "ars",
+		},
+	}
 	at := jwt.NewWithClaims(jwt.SigningMethodHS256, atClaims)
 	td.AccessToken, err = at.SignedString([]byte(auth.Secret))
 	if err != nil {
 		return nil, err
 	}
 
-	rtClaims := jwt.MapClaims{}
-	rtClaims["refresh_uuid"] = td.RefreshUuid
-	rtClaims["role"] = role
+	rtClaims := MyCustomClaims{
+		"ars",
+		td.RefreshUuid,
+		role,
+		jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(rtExpires),
+			Issuer:    "ars",
+		},
+	}
 	rt := jwt.NewWithClaims(jwt.SigningMethodHS256, rtClaims)
 	td.RefreshToken, err = rt.SignedString([]byte(auth.Secret))
 	if err != nil {
